@@ -90,6 +90,8 @@ return {
 				"tailwindcss",
 				"sqlls",
 				"bashls",
+				"gopls",
+				"clangd",
 			}
 
 			mason_lspconfig.setup({
@@ -175,7 +177,49 @@ return {
 							},
 						})
 					end,
-					["tailwindcss"] = function()
+					["gopls"] = function()
+					lspconfig.gopls.setup({
+						capabilities = capabilities,
+						settings = {
+							gopls = {
+								gofumpt = true,
+								codelenses = {
+									generate = true,
+									gc_details = true,
+									test = true,
+									tidy = true,
+									vuln_check = true,
+								},
+								analyses = {
+									shadow = true,
+									unusedparams = true,
+								},
+								usePlaceholders = true,
+							},
+						},
+					})
+				end,
+				["clangd"] = function()
+					lspconfig.clangd.setup({
+						capabilities = capabilities,
+						cmd = {
+							"clangd",
+							"--background-index",
+							"--clang-tidy",
+							"--completion-style=detailed",
+							"--header-insertion=iwyu",
+							"--cross-file-rename",
+						},
+						init_options = {
+							clangdFileStatus = true,
+							usePlaceholders = true,
+							unusedIncludes = true,
+							completeUnimported = true,
+							semanticHighlighting = true,
+						},
+					})
+				end,
+				["tailwindcss"] = function()
 						lspconfig.tailwindcss.setup({
 							capabilities = capabilities,
 							settings = {
@@ -222,15 +266,18 @@ return {
 		config = function()
 			require("mason-tool-installer").setup({
 				ensure_installed = {
-					"prettierd",
-					"pyrefly",
-					"stylua",
-					"tailwindcss",
-					"taplo",
+				"prettierd",
+				"pyrefly",
+				"stylua",
+				"taplo",
 					"buf",
 					"sql-formatter",
 					"shfmt",
 					"shellcheck",
+					"goimports",
+					"gofumpt",
+					"clang-format",
+					"codelldb",
 				},
 				auto_update = false,
 				run_on_start = true,
@@ -252,6 +299,7 @@ return {
 			formatters_by_ft = {
 				lua = { "stylua" },
 				python = { "ruff_format", "ruff_fix" },
+				go = { "goimports", "gofumpt" },
 				javascript = { "prettierd" },
 				typescript = { "prettierd" },
 				javascriptreact = { "prettierd" },
@@ -266,6 +314,9 @@ return {
 				toml = { "taplo" },
 				proto = { "buf" },
 				sql = { "sql_formatter" },
+				c = { "clang-format" },
+				cpp = { "clang-format" },
+				objc = { "clang-format" },
 			},
 			formatters = {
 				ruff_format = {

@@ -1,7 +1,10 @@
 return {
 	"saghen/blink.cmp",
-	version = "1.*",
-	dependencies = { "rafamadriz/friendly-snippets", "L3MON4D3/LuaSnip" },
+	dependencies = {
+		"saghen/blink.lib",
+		"rafamadriz/friendly-snippets",
+		"L3MON4D3/LuaSnip",
+	},
 	opts = {
 		keymap = { preset = "enter" },
 		appearance = {

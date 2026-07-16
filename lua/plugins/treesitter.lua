@@ -26,6 +26,13 @@ return {
 			"css",
 			"sql",
 			"bash",
+			"go",
+			"gomod",
+			"gosum",
+			"c",
+			"cpp",
+			"cmake",
+			"objc",
 		}
 
 		pcall(ts.install, parsers)
@@ -37,7 +44,7 @@ return {
 			end,
 		})
 
-		local indent_ft = { "lua", "python", "javascript", "typescript", "tsx", "bash" }
+		local indent_ft = { "lua", "python", "javascript", "typescript", "tsx", "bash", "go", "c", "cpp" }
 		vim.api.nvim_create_autocmd("FileType", {
 			pattern = indent_ft,
 			callback = function()
