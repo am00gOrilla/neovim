@@ -1,89 +1,75 @@
 return {
-	{
-		"junegunn/fzf.vim",
-		dependencies = { "junegunn/fzf", build = "./install --all" },
-		config = function()
-			local function calculate_distance(rel_path)
-				if not rel_path:match("/") then
-					return 0
-				end
-				local dir = vim.fn.fnamemodify(rel_path, ":h")
-				local count = 0
-				for _ in dir:gmatch("[^/]+") do
-					count = count + 1
-				end
-				return count
+	"junegunn/fzf.vim",
+	cmd = "FZFFilesProximity",
+	dependencies = { "junegunn/fzf" },
+	config = function()
+		local running
+		vim.api.nvim_create_user_command("FZFFilesProximity", function()
+			if running then
+				return
 			end
-
-			local function files_with_proximity()
-				local current_file = vim.fn.expand("%:p")
-				if current_file == "" then
-					vim.notify("No file is open.", vim.log.levels.WARN)
-					return
-				end
-				local current_dir = vim.fn.fnamemodify(current_file, ":h")
-
-				local git_dir = vim.fn.finddir(".git", current_dir .. ";" .. os.getenv("HOME"))
-				if git_dir == "" then
-					vim.notify("Could not find a .git directory in any parent up to $HOME.", vim.log.levels.ERROR)
-					return
-				end
-				local project_root = vim.fn.fnamemodify(git_dir, ":h")
-
-				local rel_current_dir = current_dir:sub(#project_root + 2)
-				local parent_prefix = vim.fn.fnamemodify(rel_current_dir, ":h")
-
-				local command = string.format('rg --files "%s" 2>/dev/null', project_root)
-				local files = vim.fn.systemlist(command)
-				if vim.v.shell_error ~= 0 or #files == 0 then
-					vim.notify("Failed to generate file list or project is empty.", vim.log.levels.ERROR)
-					return
-				end
-
-				local items = {}
-				for _, abs_path in ipairs(files) do
-					local rel = abs_path:sub(#project_root + 2)
-					local dist = calculate_distance(rel)
-
-					local display
-					if parent_prefix ~= "" and rel:find("^" .. vim.pesc(parent_prefix) .. "/") then
-						display = rel:sub(#parent_prefix + 2)
-					else
-						display = rel
+			if vim.fn.executable("rg") ~= 1 or vim.fn.executable("fzf") ~= 1 then
+				vim.notify("File search requires rg and fzf", vim.log.levels.ERROR)
+				return
+			end
+			local root = require("dev").root()
+			local file = vim.api.nvim_buf_get_name(0)
+			local current = file ~= "" and vim.fs.dirname(file) or root
+			local current_parts = vim.split(current:sub(#root + 2), "/", { trimempty = true })
+			-- Run discovery asynchronously; argv handles spaces and shell characters.
+			running = vim.system(
+				{
+					"rg",
+					"--files",
+					"--hidden",
+					"-g",
+					"!.git",
+					"-g",
+					"!node_modules",
+					"-g",
+					"!.venv",
+					"-g",
+					"!venv",
+					"-g",
+					"!__pycache__",
+				},
+				{ cwd = root, text = true },
+				vim.schedule_wrap(function(result)
+					running = nil
+					if result.code > 1 then
+						vim.notify(result.stderr, vim.log.levels.ERROR)
+						return
 					end
-
-					table.insert(items, {
-						full_rel = rel,
-						display = display,
-						distance = dist,
-					})
-				end
-
-				table.sort(items, function(a, b)
-					if a.distance ~= b.distance then
-						return a.distance < b.distance
-					end
-					return a.display < b.display
-				end)
-
-				local fzf_source = {}
-				for _, item in ipairs(items) do
-					table.insert(fzf_source, item.display .. "\t" .. item.full_rel)
-				end
-
-				vim.fn["fzf#run"](vim.fn["fzf#wrap"]({
-					source = fzf_source,
-					sink = function(line)
-						local full_rel = line:match("\t(.+)$")
-						if full_rel then
-							vim.cmd("edit " .. project_root .. "/" .. full_rel)
+					local items = {}
+					for _, path in ipairs(vim.split(result.stdout or "", "\n", { trimempty = true })) do
+						local dir = vim.fs.dirname(path)
+						local parts = vim.split(dir == "." and "" or dir, "/", { trimempty = true })
+						local common = 0
+						for i = 1, math.min(#parts, #current_parts) do
+							if parts[i] ~= current_parts[i] then
+								break
+							end
+							common = i
 						end
-					end,
-					options = '--delimiter "\\t" --with-nth 1 --prompt "Files (proximity) > "',
-				}))
-			end
-
-			vim.api.nvim_create_user_command("FZFFilesProximity", files_with_proximity, {})
-		end,
-	},
+						items[#items + 1] = { path = path, distance = #parts + #current_parts - 2 * common }
+					end
+					table.sort(items, function(a, b)
+						if a.distance ~= b.distance then
+							return a.distance < b.distance
+						end
+						return a.path < b.path
+					end)
+					vim.fn["fzf#run"](vim.fn["fzf#wrap"]({
+						source = vim.tbl_map(function(item)
+							return item.path
+						end, items),
+						sink = function(path)
+							vim.cmd.edit(vim.fn.fnameescape(root .. "/" .. path))
+						end,
+						options = "--prompt='Project files > '",
+					}))
+				end)
+			)
+		end, { desc = "Find project files by proximity" })
+	end,
 }

@@ -1,18 +1,18 @@
 return {
 	"nvim-treesitter/nvim-treesitter",
+	branch = "main",
 	lazy = false,
+	dependencies = { "mason-org/mason.nvim" },
 	build = ":TSUpdate",
 	config = function()
-		local ok, ts = pcall(require, "nvim-treesitter")
-		if not ok then
-			vim.notify("nvim-treesitter not available", vim.log.levels.WARN)
-			return
-		end
-
+		local ts = require("nvim-treesitter")
 		ts.setup({})
-
 		local parsers = {
 			"lua",
+			"vim",
+			"vimdoc",
+			"query",
+			"regex",
 			"python",
 			"rust",
 			"toml",
@@ -29,26 +29,36 @@ return {
 			"go",
 			"gomod",
 			"gosum",
+			"gowork",
 			"c",
 			"cpp",
 			"cmake",
 			"objc",
+			"markdown",
+			"markdown_inline",
 		}
-
-		pcall(ts.install, parsers)
+		vim.api.nvim_create_user_command("DevParsersInstall", function()
+			ts.install(parsers)
+		end, { desc = "Install development language parsers" })
 
 		vim.api.nvim_create_autocmd("FileType", {
-			pattern = parsers,
-			callback = function()
-				pcall(vim.treesitter.start)
-			end,
-		})
-
-		local indent_ft = { "lua", "python", "javascript", "typescript", "tsx", "bash", "go", "c", "cpp" }
-		vim.api.nvim_create_autocmd("FileType", {
-			pattern = indent_ft,
-			callback = function()
-				vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+			group = vim.api.nvim_create_augroup("DevelopmentTreesitter", { clear = true }),
+			callback = function(args)
+				local ft = vim.bo[args.buf].filetype
+				local lang = vim.treesitter.language.get_lang(ft)
+				if not lang or not vim.tbl_contains(parsers, lang) then
+					return
+				end
+				if vim.api.nvim_buf_get_offset(args.buf, vim.api.nvim_buf_line_count(args.buf)) > 1024 * 1024 then
+					return
+				end
+				if not pcall(vim.treesitter.start, args.buf, lang) then
+					return
+				end
+				-- Parser names differ from filetypes: tsx -> typescriptreact, bash -> sh.
+				if vim.treesitter.query.get(lang, "indents") then
+					vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+				end
 			end,
 		})
 	end,

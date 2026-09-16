@@ -15,6 +15,7 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 require("vimops")
+require("dev") -- Capture the original Python environment before plugins activate a venv.
 require("lazy").setup(
     {
         spec = {

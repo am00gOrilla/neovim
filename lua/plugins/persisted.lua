@@ -11,11 +11,15 @@ return {
 		vim.api.nvim_create_autocmd("User", {
 			pattern = "PersistedSavePre",
 			callback = function()
+				if not package.loaded["neo-tree.sources.manager"] then
+					vim.g.neo_tree_was_open = 0
+					return
+				end
 				local was_open = false
 				local ok, state = pcall(function()
 					return require("neo-tree.sources.manager").get_state("filesystem")
 				end)
-				if ok and state then
+				if ok and state and state.winid and vim.api.nvim_win_is_valid(state.winid) then
 					was_open = true
 					pcall(vim.cmd, "Neotree close")
 				end

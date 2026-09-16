@@ -1,55 +1,113 @@
 return {
-	-- Mason: Installer for LSP servers and tools
 	{
-		"williamboman/mason.nvim",
-		config = function()
-			require("mason").setup()
-		end,
+		"mason-org/mason.nvim",
+		cmd = { "Mason", "MasonInstall", "MasonUpdate", "MasonLog" },
+		opts = {},
 	},
-
-	-- Mason-LSPConfig: Manages LSP installation and setup
 	{
-		"williamboman/mason-lspconfig.nvim",
+		"neovim/nvim-lspconfig",
+		event = { "BufReadPre", "BufNewFile" },
 		dependencies = {
-			"neovim/nvim-lspconfig",
+			"mason-org/mason.nvim",
+			"mason-org/mason-lspconfig.nvim",
+			"saghen/blink.cmp",
 			"b0o/schemastore.nvim",
 		},
 		config = function()
-			local lspconfig = require("lspconfig")
-			local mason_lspconfig = require("mason-lspconfig")
-			local capabilities = require("blink.cmp").get_lsp_capabilities()
-
-			-- ==========================
-			-- Ignore SC2034 in any .env* file
-			-- ==========================
-			local default_handler = vim.lsp.handlers["textDocument/publishDiagnostics"]
-
-			vim.lsp.handlers["textDocument/publishDiagnostics"] = function(err, result, ctx, config)
-				if result and result.diagnostics then
-					local bufnr = vim.uri_to_bufnr(result.uri)
-					local filename = vim.api.nvim_buf_get_name(bufnr)
-					if filename:match("[.]env") then
-						local filtered = {}
-						for _, diag in ipairs(result.diagnostics) do
-							if diag.code ~= "SC2034" then
-								table.insert(filtered, diag)
-							end
+			-- Mason v2 removed setup handlers. Configure before enabling servers.
+			vim.lsp.config("*", {
+				capabilities = require("blink.cmp").get_lsp_capabilities(),
+				flags = { debounce_text_changes = 150 },
+			})
+			local servers = {
+				lua_ls = {
+					settings = {
+						Lua = {
+							runtime = { version = "LuaJIT" },
+							diagnostics = { globals = { "vim" } },
+							workspace = { library = { vim.env.VIMRUNTIME }, checkThirdParty = false },
+							telemetry = { enable = false },
+						},
+					},
+				},
+				pyrefly = {
+					before_init = function(_, config)
+						config.settings = config.settings or {}
+						config.settings.python = config.settings.python or {}
+						local python = config.settings.python.pythonPath
+						if not python or vim.fn.executable(python) ~= 1 then
+							python = require("dev").python(nil, config.root_dir)
 						end
-						result.diagnostics = filtered
-					end
-				end
-				-- Protect against notify errors
-				if vim.fn.exists("g:loaded_noice") == 1 then
-					local ok, _ = pcall(default_handler, err, result, ctx, config)
-					if not ok then
-						return
-					end
-				else
-					default_handler(err, result, ctx, config)
-				end
+						config.settings.python.pythonPath = python
+						-- Pyrefly reads pythonPath from initializationOptions at startup.
+						-- Refresh it on VenvSelect restarts as well as the first launch.
+						config.init_options = config.init_options or {}
+						config.init_options.pythonPath = python
+					end,
+				},
+				ruff = {
+					init_options = { settings = { lint = { extendSelect = { "I" } } } },
+					on_attach = function(client)
+						client.server_capabilities.hoverProvider = false
+						client.server_capabilities.documentFormattingProvider = false
+						client.server_capabilities.documentRangeFormattingProvider = false
+					end,
+				},
+				ts_ls = {},
+				eslint = {}, -- Only attaches in an ESLint-configured workspace.
+				gopls = {
+					settings = {
+						gopls = {
+							gofumpt = true,
+							usePlaceholders = true,
+							analyses = { unusedparams = true },
+							codelenses = { generate = true, test = true, tidy = true },
+						},
+					},
+				},
+				clangd = {
+					cmd = { "clangd", "--background-index", "--completion-style=detailed", "--header-insertion=iwyu" },
+				},
+				jsonls = {
+					before_init = function(_, config)
+						config.settings.json.schemas = require("schemastore").json.schemas()
+					end,
+					settings = { json = { validate = { enable = true } } },
+				},
+				yamlls = {},
+				dockerls = {},
+				html = {},
+				cssls = { settings = { css = { lint = { unknownAtRules = "ignore" } } } },
+				tailwindcss = {},
+				bashls = {
+					handlers = {
+						["textDocument/publishDiagnostics"] = function(err, result, ctx, config)
+							if
+								result
+								and result.uri
+								and vim.fs.basename(vim.uri_to_fname(result.uri)):match("^%.env")
+							then
+								result.diagnostics = vim.tbl_filter(function(d)
+									return tostring(d.code) ~= "SC2034" and tostring(d.code) ~= "2034"
+								end, result.diagnostics or {})
+							end
+							vim.lsp.handlers["textDocument/publishDiagnostics"](err, result, ctx, config)
+						end,
+					},
+				},
+			}
+			for name, config in pairs(servers) do
+				vim.lsp.config(name, config)
 			end
-
+			-- Install explicitly with :MasonToolsInstall; no startup install queue.
+			require("mason-lspconfig").setup({ ensure_installed = {}, automatic_enable = false })
+			vim.lsp.enable(vim.tbl_keys(servers))
 			vim.diagnostic.config({
+				underline = true,
+				update_in_insert = false,
+				severity_sort = true,
+				virtual_text = { spacing = 2, source = "if_many" },
+				float = { border = "rounded", source = "if_many" },
 				signs = {
 					text = {
 						[vim.diagnostic.severity.ERROR] = " ",
@@ -58,278 +116,48 @@ return {
 						[vim.diagnostic.severity.INFO] = " ",
 					},
 				},
-				underline = true,
-				update_in_insert = true,
-				severity_sort = true,
-				virtual_text = true,
-				float = {
-					border = "rounded",
-					source = "if_many",
-					focusable = false,
-					close_events = { "CursorMoved", "CursorMovedI", "BufHidden", "InsertCharPre", "WinLeave" },
-					format = function(diagnostic)
-						return diagnostic.message
-					end,
-					options = {
-						wrap = true,
-						linebreak = false,
-					},
-				},
-			})
-
-			local servers = {
-				"lua_ls",
-				"pyrefly",
-				"ruff",
-				"jsonls",
-				"yamlls",
-				"dockerls",
-				"ts_ls",
-				"html",
-				"cssls",
-				"tailwindcss",
-				"sqlls",
-				"bashls",
-				"gopls",
-				"clangd",
-			}
-
-			mason_lspconfig.setup({
-				ensure_installed = servers,
-				handlers = {
-					function(server_name)
-						lspconfig[server_name].setup({
-							capabilities = capabilities,
-						})
-					end,
-					["lua_ls"] = function()
-						lspconfig.lua_ls.setup({
-							capabilities = capabilities,
-							settings = {
-								Lua = {
-									runtime = { version = "LuaJIT" },
-									diagnostics = { globals = { "vim" } },
-									workspace = {
-										library = vim.api.nvim_get_runtime_file("", true),
-										checkThirdParty = false,
-									},
-									telemetry = { enable = false },
-								},
-							},
-						})
-					end,
-					["ruff"] = function()
-						lspconfig.ruff.setup({
-							capabilities = capabilities,
-							on_attach = function(client, bufnr)
-								client.server_capabilities.hoverProvider = false
-								client.server_capabilities.documentFormattingProvider = false
-								client.server_capabilities.documentRangeFormattingProvider = false
-								vim.keymap.set("n", "rf", function()
-									require("conform").format({ bufnr = bufnr })
-								end, { buffer = bufnr, desc = "Format with Conform" })
-							end,
-							settings = {
-								lint = {
-									extendSelect = { "I" },
-								},
-							},
-						})
-					end,
-					["jsonls"] = function()
-						lspconfig.jsonls.setup({
-							capabilities = capabilities,
-							settings = {
-								json = {
-									schemas = require("schemastore").json.schemas(),
-									validate = { enable = true },
-								},
-							},
-						})
-					end,
-
-					["html"] = function()
-						lspconfig.html.setup({
-							capabilities = capabilities,
-							settings = {
-								html = {
-									hover = { documentation = true, references = true },
-									validate = { scripts = true },
-									suggest = {
-										completeAttributeTags = true,
-										completeTags = true,
-										snippetsPreventDoubleInsertion = false,
-									},
-								},
-							},
-						})
-					end,
-					["cssls"] = function()
-						lspconfig.cssls.setup({
-							capabilities = capabilities,
-							settings = {
-								css = {
-									validate = true,
-									lint = { unknownAtRules = "ignore" },
-								},
-								less = { validate = true },
-								scss = { validate = true },
-							},
-						})
-					end,
-					["gopls"] = function()
-					lspconfig.gopls.setup({
-						capabilities = capabilities,
-						settings = {
-							gopls = {
-								gofumpt = true,
-								codelenses = {
-									generate = true,
-									gc_details = true,
-									test = true,
-									tidy = true,
-									vuln_check = true,
-								},
-								analyses = {
-									shadow = true,
-									unusedparams = true,
-								},
-								usePlaceholders = true,
-							},
-						},
-					})
-				end,
-				["clangd"] = function()
-					lspconfig.clangd.setup({
-						capabilities = capabilities,
-						cmd = {
-							"clangd",
-							"--background-index",
-							"--clang-tidy",
-							"--completion-style=detailed",
-							"--header-insertion=iwyu",
-							"--cross-file-rename",
-						},
-						init_options = {
-							clangdFileStatus = true,
-							usePlaceholders = true,
-							unusedIncludes = true,
-							completeUnimported = true,
-							semanticHighlighting = true,
-						},
-					})
-				end,
-				["tailwindcss"] = function()
-						lspconfig.tailwindcss.setup({
-							capabilities = capabilities,
-							settings = {
-								tailwindCSS = {
-									classAttributes = { "class", "className", "ngClass", ":class", "classList" },
-									lint = {
-										incompatibleProperty = "error",
-										invalidApply = "error",
-										invalidConfigPath = "error",
-										invalidScreen = "error",
-										invalidVariant = "error",
-										recommendedVariantOrder = "warning",
-									},
-									validate = true,
-									experimental = {
-										classRegex = {
-											"class:['\"]([^'\"]*)['\"]",
-											"class:['\"]([^'\"]*)['\"]",
-											"class=\\{([^\\}]*)\\}",
-											"class=([^\\s>]+)",
-											"class:(.*?)[^\\S]",
-											"class=([^\\s>]+)",
-										},
-									},
-								},
-							},
-							init_options = {
-								userLanguages = {
-									eelixir = "html-eex",
-									eruby = "erb",
-								},
-							},
-						})
-					end,
-				},
 			})
 		end,
 	},
-
-	-- Mason-tool-installer for non-LSP tools ⚙️
 	{
 		"WhoIsSethDaniel/mason-tool-installer.nvim",
-		dependencies = { "williamboman/mason.nvim" },
-		config = function()
-			require("mason-tool-installer").setup({
-				ensure_installed = {
-				"prettierd",
+		cmd = { "MasonToolsInstall", "MasonToolsInstallSync", "MasonToolsUpdate", "MasonToolsUpdateSync" },
+		dependencies = { "mason-org/mason.nvim" },
+		opts = {
+			ensure_installed = {
+				"tree-sitter-cli",
+				"lua-language-server",
 				"pyrefly",
+				"ruff",
+				"typescript-language-server",
+				"eslint-lsp",
+				"gopls",
+				"clangd",
+				"json-lsp",
+				"yaml-language-server",
+				"dockerfile-language-server",
+				"html-lsp",
+				"css-lsp",
+				"tailwindcss-language-server",
+				"bash-language-server",
+				"prettierd",
 				"stylua",
 				"taplo",
-					"buf",
-					"sql-formatter",
-					"shfmt",
-					"shellcheck",
-					"goimports",
-					"gofumpt",
-					"clang-format",
-					"codelldb",
-				},
-				auto_update = false,
-				run_on_start = true,
-				start_delay = 1000,
-			})
-		end,
-	},
-
-	-- Formatting with conform.nvim
-	{
-		"stevearc/conform.nvim",
-		event = { "BufReadPre", "BufNewFile" },
-		opts = {
-			notify_on_error = false,
-			format_on_save = {
-				timeout_ms = 500,
-				lsp_fallback = true,
+				"buf",
+				"sql-formatter",
+				"shfmt",
+				"shellcheck",
+				"goimports",
+				"gofumpt",
+				"clang-format",
+				"codelldb",
+				"debugpy",
+				"delve",
+				"js-debug-adapter",
 			},
-			formatters_by_ft = {
-				lua = { "stylua" },
-				python = { "ruff_format", "ruff_fix" },
-				go = { "goimports", "gofumpt" },
-				javascript = { "prettierd" },
-				typescript = { "prettierd" },
-				javascriptreact = { "prettierd" },
-				typescriptreact = { "prettierd" },
-				css = { "prettierd" },
-				scss = { "prettierd" },
-				html = { "prettierd" },
-				json = { "prettierd" },
-				jsonl = { "prettierd" },
-				yaml = { "prettierd" },
-				rust = { "rustfmt" },
-				toml = { "taplo" },
-				proto = { "buf" },
-				sql = { "sql_formatter" },
-				c = { "clang-format" },
-				cpp = { "clang-format" },
-				objc = { "clang-format" },
-			},
-			formatters = {
-				ruff_format = {
-					command = "ruff",
-					args = { "format", "$FILENAME" },
-					stdin = false,
-				},
-				ruff_fix = {
-					command = "ruff",
-					args = { "check", "--exit-zero", "--fix", "--extend-select", "I", "--", "$FILENAME" },
-					stdin = false,
-				},
-			},
+			auto_update = false,
+			run_on_start = false,
+			integrations = { ["mason-lspconfig"] = false, ["mason-null-ls"] = false, ["mason-nvim-dap"] = false },
 		},
 	},
 }

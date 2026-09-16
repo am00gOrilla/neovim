@@ -1,19 +1,18 @@
 return {
 	"linux-cultist/venv-selector.nvim",
-	dependencies = {
-		"neovim/nvim-lspconfig",
-		"nvim-telescope/telescope.nvim",
-		"mfussenegger/nvim-dap-python",
-	},
+	dependencies = { "neovim/nvim-lspconfig", "nvim-telescope/telescope.nvim" },
 	ft = "python",
-	config = function()
-		local function shorter_name(filename)
-			return filename:gsub(os.getenv("HOME"), "~"):gsub("/bin/python", "")
-		end
-		require("venv-selector").setup({
-			options = { on_telescope_result_callback = shorter_name },
-			name = { ".venv" },
-			auto_refresh = false,
-		})
-	end,
+	cmd = { "VenvSelect", "VenvSelectCached" },
+	opts = {
+		cache = { file = vim.fn.stdpath("cache") .. "/venv-selector/venvs.json" },
+		options = {
+			picker = "telescope",
+			override_notify = false,
+			activate_venv_in_terminal = true,
+			cached_venv_automatic_activation = true,
+			on_telescope_result_callback = function(filename)
+				return vim.fn.fnamemodify(filename, ":~"):gsub("/bin/python$", "")
+			end,
+		},
+	},
 }

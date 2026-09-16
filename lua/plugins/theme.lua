@@ -1,5 +1,11 @@
 return {
 	{
+		"projekt0n/github-nvim-theme",
+		name = "github-theme",
+		lazy = false,
+		priority = 1000,
+	},
+	{
 		"catppuccin/nvim",
 		name = "catppuccin",
 	},
@@ -33,6 +39,7 @@ return {
 		config = function()
 			require("themery").setup({
 				themes = {
+					"github_dark_high_contrast",
 					-- Catppuccin
 					"catppuccin-frappe",
 					"catppuccin-macchiato",

@@ -1,5 +1,6 @@
 return {
     'kevinhwang91/nvim-ufo',
+    event = { "BufReadPost", "BufNewFile" },
     dependencies = { 'kevinhwang91/promise-async' },
     config = function()
         vim.o.foldcolumn = '0'    -- '1' if you want to have extra column for fold info

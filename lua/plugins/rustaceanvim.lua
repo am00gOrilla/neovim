@@ -6,12 +6,12 @@ return {
 		local data = vim.fn.stdpath("data")
 		local pkg_base = data .. "/mason/packages/codelldb/extension"
 		local codelldb_path = pkg_base .. "/adapter/codelldb"
-		local liblldb_path = pkg_base .. "/lldb/lib/liblldb.so"
+		local liblldb_path = pkg_base .. "/lldb/lib/liblldb." .. (vim.fn.has("mac") == 1 and "dylib" or "so")
 
 		local cfg = require("rustaceanvim.config")
 		vim.g.rustaceanvim = {
 			server = {
-				capabilities = require("blink-cmp").get_lsp_capabilities(),
+				capabilities = vim.lsp.protocol.make_client_capabilities(),
 				default_settings = {
 					["rust-analyzer"] = {
 						cargo = { buildScripts = { enable = true } },
@@ -29,6 +29,5 @@ return {
 			},
 		}
 
-		vim.lsp.inlay_hint.enable(true)
 	end,
 }

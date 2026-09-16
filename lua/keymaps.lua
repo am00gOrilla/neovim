@@ -62,16 +62,15 @@ vim.keymap.set(
 )
 
 -- debugging
-local dap = require('dap')
-vim.keymap.set("n", "<F2>", function() dap.step_into() end, { desc = "Debugger step into" })
-vim.keymap.set("n", "<F3>", function() dap.step_over() end, { desc = "Debugger step over" })
-vim.keymap.set("n", "<F4>", function() dap.step_out() end, { desc = "Debugger step out" })
-vim.keymap.set("n", "<F5>", function() dap.continue() end, { desc = "Debugger continue" })
-vim.keymap.set("n", "<Leader>b", function() dap.toggle_breakpoint() end, { desc = "Debugger toggle breakpoint" })
-vim.keymap.set("n", "<F6>", function() dap.set_breakpoint(vim.fn.input('Breakpoint condition: ')) end,
+vim.keymap.set("n", "<F2>", function() require("dap").step_into() end, { desc = "Debugger step into" })
+vim.keymap.set("n", "<F3>", function() require("dap").step_over() end, { desc = "Debugger step over" })
+vim.keymap.set("n", "<F4>", function() require("dap").step_out() end, { desc = "Debugger step out" })
+vim.keymap.set("n", "<F5>", function() require("dap").continue() end, { desc = "Debugger continue" })
+vim.keymap.set("n", "<Leader>b", function() require("dap").toggle_breakpoint() end, { desc = "Debugger toggle breakpoint" })
+vim.keymap.set("n", "<F6>", function() require("dap").set_breakpoint(vim.fn.input('Breakpoint condition: ')) end,
     { desc = "Debugger set conditional breakpoint" })
-vim.keymap.set("n", "<F7>", function() dap.terminate() end, { desc = "Debugger reset" })
-vim.keymap.set("n", "<F8>", function() dap.run_last() end, { desc = "Debugger run last" })
+vim.keymap.set("n", "<F7>", function() require("dap").terminate() end, { desc = "Debugger reset" })
+vim.keymap.set("n", "<F8>", function() require("dap").run_last() end, { desc = "Debugger run last" })
 
 -- Flash
 vim.keymap.set({ "n", "x", "o" }, "s", function() require("flash").jump() end, { desc = "Flash" })
@@ -115,9 +114,10 @@ end, { desc = "Copy diagnostics to clipboard" })
 
 
 -- neo-tree
-vim.keymap.set("n", "<leader>e", ":Neotree toggle<CR>", { desc = "Explorer NeoTree (Toggle)" })
+vim.keymap.set("n", "<leader>e", function() require("explorer").focus() end, { desc = "Focus explorer / editor" })
+vim.keymap.set("n", "<C-b>", function() require("explorer").toggle() end, { desc = "Show / hide explorer" })
 vim.keymap.set("n", "<leader>E", ":Neotree reveal<CR>", { desc = "Explorer NeoTree (Reveal File)" })
-vim.keymap.set("n", "<leader>nf", ":Neotree filesystem<CR>", { desc = "Filesystem NeoTree" })
+vim.keymap.set("n", "<leader>nf", ":Neotree focus filesystem left<CR>", { desc = "Focus filesystem explorer" })
 vim.keymap.set("n", "<leader>gs", ":Neotree git_status<CR>", { desc = "Git Status NeoTree" })
 
 -- noice
@@ -125,9 +125,8 @@ vim.keymap.set("n", "<leader>nd", ":NoiceDismiss<CR>", { desc = "Dismiss Noice M
 vim.keymap.set("n", "<leader>nl", ":Telescope noice<CR>", { desc = "List All Noice Messages" })
 
 -- ufo
-local ufo = require("ufo")
-vim.keymap.set('n', 'zR', ufo.openAllFolds)
-vim.keymap.set('n', 'zM', ufo.closeAllFolds)
+vim.keymap.set('n', 'zR', function() require('ufo').openAllFolds() end)
+vim.keymap.set('n', 'zM', function() require('ufo').closeAllFolds() end)
 
 -- Persisted
 vim.keymap.set("n", "<leader>ss", ":SessionSave<CR>", { desc = "Save Session" })
@@ -135,16 +134,15 @@ vim.keymap.set("n", "<leader>sd", ":SessionDelete<CR>", { desc = "Delete Session
 vim.keymap.set("n", "<leader>sl", ":Telescope persisted<CR>", { desc = "Delete Session" })
 
 -- Rustaceanvim
-vim.keymap.set("n", "<leader>rdt", "<cmd>'RustLsp testables'<CR>", { desc = "Debugger testables" })
+vim.keymap.set("n", "<leader>rdt", "<cmd>RustLsp testables<CR>", { desc = "Debugger testables" })
 
 -- tabular (csv view)
 vim.keymap.set("n", "<leader>csv", ":Tabularize /,<CR>", { desc = "Tabularize by comma" })
 vim.keymap.set("n", "<leader>tsv", ":Tabularize /\\t/<CR>", { desc = "Tabularize by tab" })
 
 -- telescope
-local tbuilt = require("telescope.builtin")
-vim.keymap.set("n", "<leader>ff", tbuilt.find_files, { desc = "Telescope find files" })
-vim.keymap.set("n", "<leader>fg", tbuilt.live_grep, { desc = "Telescope live grep" })
+vim.keymap.set("n", "<leader>ff", function() require("telescope.builtin").find_files({ cwd = require("dev").root() }) end, { desc = "Telescope find files" })
+vim.keymap.set("n", "<leader>fg", function() require("telescope.builtin").live_grep({ cwd = require("dev").root() }) end, { desc = "Telescope live grep" })
 
 -- theme
 vim.keymap.set("n", "<leader>tsm", "<cmd>Themery<cr>", { desc = "Theme switcher menu" })
@@ -182,5 +180,32 @@ vim.keymap.set('n', '<leader>z', function()
   end
   if top_win then vim.api.nvim_set_current_win(top_win) end
 end, { desc = 'Focus topmost floating window' })
+
+-- Development workflow
+vim.keymap.set({ "n", "v" }, "<leader>gf", function()
+    require("conform").format({ async = true, lsp_format = "fallback" })
+end, { desc = "Format buffer or selection" })
+vim.keymap.set("n", "rf", function() require("conform").format({ async = true }) end, { desc = "Format buffer" })
+vim.keymap.set("n", "<leader>uf", function()
+    vim.b.disable_autoformat = not vim.b.disable_autoformat
+    vim.notify("Format on save: " .. (vim.b.disable_autoformat and "off" or "on"))
+end, { desc = "Toggle format on save (buffer)" })
+vim.keymap.set("n", "<leader>cr", vim.lsp.buf.rename, { desc = "Rename symbol" })
+vim.keymap.set("n", "gr", function() require("telescope.builtin").lsp_references() end, { desc = "Find references" })
+vim.keymap.set("n", "gi", vim.lsp.buf.implementation, { desc = "Go to implementation" })
+vim.keymap.set("n", "<leader>fd", function() require("telescope.builtin").diagnostics() end, { desc = "Find diagnostics" })
+vim.keymap.set("n", "<leader>fs", function() require("telescope.builtin").lsp_document_symbols() end, { desc = "Find document symbols" })
+vim.keymap.set("n", "<leader>ce", vim.diagnostic.open_float, { desc = "Show diagnostic" })
+vim.keymap.set("n", "<leader>du", function() require("dap"); require("dapui").toggle() end, { desc = "Toggle debugger UI" })
+vim.keymap.set("n", "<leader>dl", function()
+    require("dap")
+    require("dap.ext.vscode").load_launchjs(require("dev").root() .. "/.vscode/launch.json")
+end, { desc = "Load project launch.json" })
+for action, key in pairs({ run = "r", test = "t", build = "b" }) do
+    vim.api.nvim_create_user_command("Dev" .. action:sub(1, 1):upper() .. action:sub(2), function()
+        require("dev").task(action)
+    end, {})
+    vim.keymap.set("n", "<leader>m" .. key, function() require("dev").task(action) end, { desc = "Project " .. action })
+end
 
 -- stylua: ignore end
