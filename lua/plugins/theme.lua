@@ -39,6 +39,10 @@ return {
 		config = function()
 			require("themery").setup({
 				themes = {
+					{
+						name = "VS Code Dark High Contrast",
+						colorscheme = "vscode_hc",
+					},
 					"github_dark_high_contrast",
 					-- Catppuccin
 					"catppuccin-frappe",
@@ -76,7 +80,6 @@ return {
 					"dayfox",
 					"kanagawa-lotus",
 				},
-				default = "kanagawa-wave",
 				livePreview = true,
 			})
 		end,
